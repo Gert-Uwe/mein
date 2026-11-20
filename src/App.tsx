@@ -56,7 +56,7 @@ function App() {
         </div>
         <div id="social">
           <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
+            <use href={`${import.meta.env.BASE_URL}icons.svg#social-icon`} />
           </svg>
           <h2>Connect with us</h2>
           <p>Join the Vite community</p>
@@ -68,7 +68,7 @@ function App() {
                   role="presentation"
                   aria-hidden="true"
                 >
-                  <use href="/icons.svg#github-icon"></use>
+                  <use href={`${import.meta.env.BASE_URL}icons.svg#github-icon`} />
                 </svg>
                 GitHub
               </a>
@@ -80,7 +80,7 @@ function App() {
                   role="presentation"
                   aria-hidden="true"
                 >
-                  <use href="/icons.svg#discord-icon"></use>
+                  <use href={`${import.meta.env.BASE_URL}icons.svg#discord-icon`} />
                 </svg>
                 Discord
               </a>
@@ -92,7 +92,7 @@ function App() {
                   role="presentation"
                   aria-hidden="true"
                 >
-                  <use href="/icons.svg#x-icon"></use>
+                  <use href={`${import.meta.env.BASE_URL}icons.svg#x-icon`} />
                 </svg>
                 X.com
               </a>
@@ -104,7 +104,7 @@ function App() {
                   role="presentation"
                   aria-hidden="true"
                 >
-                  <use href="/icons.svg#bluesky-icon"></use>
+                  <use href={`${import.meta.env.BASE_URL}icons.svg#bluesky-icon`} />
                 </svg>
                 Bluesky
               </a>
