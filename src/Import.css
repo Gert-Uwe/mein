@@ -1,0 +1,29 @@
+.import-box {
+  margin: 0 30px 24px;
+  padding: 18px 20px;
+  border: 1px solid #d8e7ef;
+  border-radius: 12px;
+  background: #f7fbfd;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 290px);
+  gap: 16px 22px;
+  align-items: center;
+}
+
+.import-box strong { color: #173a52; }
+.import-box p { margin: 5px 0 0; color: #607589; font-size: 14px; line-height: 1.5; }
+.import-file-label { display: flex; flex-direction: column; gap: 7px; font-size: 13px; font-weight: 700; color: #526a7e; }
+.import-file-label input { width: 100%; min-width: 0; background: white; }
+.import-file-label input::file-selector-button { border: 0; border-right: 1px solid #d5e3eb; background: #edf7fb; color: #176b91; font: inherit; font-weight: 700; padding: 5px 8px; margin-right: 8px; cursor: pointer; }
+.import-preview { grid-column: 1 / -1; border-top: 1px solid #dce9f0; padding-top: 14px; }
+.import-preview > p { margin: 0 0 14px; }
+.import-preview > .secondary-button { margin-bottom: 12px; }
+.backup-confirm { display: flex; align-items: flex-start; gap: 9px; color: #30495e; font-size: 14px; font-weight: 600; cursor: pointer; margin-bottom: 15px; }
+.backup-confirm input { width: 18px; height: 18px; min-height: 18px; padding: 0; margin: 2px 0 0; accent-color: #176b91; flex: none; }
+.import-preview .import-warning { color: #a33343; margin-bottom: 12px; }
+.import-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+
+@media (max-width: 640px) {
+  .import-box { margin: 0 17px 20px; padding: 16px; grid-template-columns: 1fr; }
+  .import-actions .primary-button { width: 100%; white-space: normal; text-align: center; }
+}

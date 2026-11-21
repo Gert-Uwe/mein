@@ -7,6 +7,17 @@ export type Reading = {
   comment: string
 }
 
+export type ReadingInput = Omit<Reading, 'id'>
+
+export function validateReading(value: ReadingInput): string | null {
+  if (!value.measuredAt || Number.isNaN(new Date(value.measuredAt).getTime())) return 'Bitte Datum und Uhrzeit eingeben.'
+  if (!Number.isInteger(value.systolic) || value.systolic < 30 || value.systolic > 300) return 'Systolisch: bitte 30 bis 300 mmHg eingeben.'
+  if (!Number.isInteger(value.diastolic) || value.diastolic < 20 || value.diastolic > 250) return 'Diastolisch: bitte 20 bis 250 mmHg eingeben.'
+  if (value.diastolic >= value.systolic) return 'Systolisch muss größer als diastolisch sein.'
+  if (!Number.isInteger(value.pulse) || value.pulse < 20 || value.pulse > 250) return 'Puls: bitte 20 bis 250 bpm eingeben.'
+  return null
+}
+
 const databaseName = 'blutdruck-tagebuch'
 const storeName = 'readings'
 
@@ -41,7 +52,16 @@ async function withStore<T>(
       database.close()
       reject(transaction.error)
     }
-    operation(store, (value) => { result = value })
+    transaction.onabort = () => {
+      database.close()
+      reject(transaction.error)
+    }
+    try {
+      operation(store, (value) => { result = value })
+    } catch (error) {
+      transaction.abort()
+      reject(error)
+    }
   })
 }
 
@@ -61,6 +81,13 @@ export function saveReading(reading: Reading): Promise<void> {
 export function deleteReading(id: string): Promise<void> {
   return withStore('readwrite', (store) => {
     store.delete(id)
+  })
+}
+
+export function replaceReadings(readings: Reading[]): Promise<void> {
+  return withStore('readwrite', (store) => {
+    store.clear()
+    for (const reading of readings) store.add(reading)
   })
 }
 

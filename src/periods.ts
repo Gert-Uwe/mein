@@ -9,6 +9,7 @@ export type PeriodKey =
   | 'custom'
 
 export type DateRange = { start: Date; end: Date }
+export type TimeOfDay = 'all' | 'morning' | 'midday' | 'evening'
 
 export const periodOptions: { value: PeriodKey; label: string }[] = [
   { value: 'this-week', label: 'Aktuelle Woche' },
@@ -56,6 +57,14 @@ export function inRange(measuredAt: string, range: DateRange | null): boolean {
   if (!range) return false
   const timestamp = new Date(measuredAt).getTime()
   return timestamp >= range.start.getTime() && timestamp < range.end.getTime()
+}
+
+export function inTimeOfDay(measuredAt: string, timeOfDay: TimeOfDay): boolean {
+  if (timeOfDay === 'all') return true
+  const hour = Number(measuredAt.slice(11, 13))
+  if (timeOfDay === 'morning') return hour < 10
+  if (timeOfDay === 'midday') return hour >= 10 && hour < 16
+  return hour >= 16
 }
 
 export function rangeLabel(range: DateRange | null): string {

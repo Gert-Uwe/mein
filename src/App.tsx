@@ -1,19 +1,21 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import Chart from './Chart'
-import { currentLocalDateTime, deleteReading, exportCsv, getReadings, saveReading, type Reading } from './data'
-import { inRange, localDate, periodOptions, periodRange, rangeLabel, type PeriodKey } from './periods'
+import { parseReadingsCsv } from './csv'
+import { currentLocalDateTime, deleteReading, exportCsv, getReadings, replaceReadings, saveReading, validateReading, type Reading, type ReadingInput } from './data'
+import { inRange, inTimeOfDay, localDate, periodOptions, periodRange, rangeLabel, type PeriodKey, type TimeOfDay } from './periods'
 import './App.css'
+import './Import.css'
 
-type Input = Omit<Reading, 'id'>
-const blank = (): Input => ({ measuredAt: currentLocalDateTime(), systolic: 0, diastolic: 0, pulse: 0, comment: '' })
+const blank = (): ReadingInput => ({ measuredAt: currentLocalDateTime(), systolic: 0, diastolic: 0, pulse: 0, comment: '' })
 
-function validate(value: Input): string | null {
-  if (!value.measuredAt || Number.isNaN(new Date(value.measuredAt).getTime())) return 'Bitte Datum und Uhrzeit eingeben.'
-  if (!Number.isInteger(value.systolic) || value.systolic < 30 || value.systolic > 300) return 'Systolisch: bitte 30 bis 300 mmHg eingeben.'
-  if (!Number.isInteger(value.diastolic) || value.diastolic < 20 || value.diastolic > 250) return 'Diastolisch: bitte 20 bis 250 mmHg eingeben.'
-  if (value.diastolic >= value.systolic) return 'Systolisch muss größer als diastolisch sein.'
-  if (!Number.isInteger(value.pulse) || value.pulse < 20 || value.pulse > 250) return 'Puls: bitte 20 bis 250 bpm eingeben.'
-  return null
+function sameReadings(first: Reading[], second: Reading[]): boolean {
+  if (first.length !== second.length) return false
+  const sorted = (readings: Reading[]) => [...readings].sort((a, b) => a.id.localeCompare(b.id))
+  const expected = sorted(second)
+  return sorted(first).every((reading, index) => {
+    const other = expected[index]
+    return reading.id === other.id && reading.measuredAt === other.measuredAt && reading.systolic === other.systolic && reading.diastolic === other.diastolic && reading.pulse === other.pulse && reading.comment === other.comment
+  })
 }
 
 function PeriodSelect({ label, value, setValue, start, end, setStart, setEnd }: {
@@ -26,7 +28,7 @@ function PeriodSelect({ label, value, setValue, start, end, setStart, setEnd }: 
   </div>
 }
 
-function InputCells({ value, change }: { value: Input; change: (value: Input) => void }) {
+function InputCells({ value, change }: { value: ReadingInput; change: (value: ReadingInput) => void }) {
   const number = (key: 'systolic' | 'diastolic' | 'pulse', label: string, min: number, max: number) =>
     <td data-label={label}><input aria-label={label} type="number" inputMode="numeric" min={min} max={max} step="1" required value={value[key] || ''} onChange={(event) => change({ ...value, [key]: event.target.value === '' ? 0 : Number(event.target.value) })} /></td>
   return <>
@@ -40,9 +42,13 @@ function InputCells({ value, change }: { value: Input; change: (value: Input) =>
 
 function App() {
   const [readings, setReadings] = useState<Reading[]>([])
-  const [draft, setDraft] = useState<Input>(blank)
+  const [draft, setDraft] = useState<ReadingInput>(blank)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [editing, setEditing] = useState<Input | null>(null)
+  const [editing, setEditing] = useState<ReadingInput | null>(null)
+  const [pendingImport, setPendingImport] = useState<{ name: string; readings: Reading[] } | null>(null)
+  const [backupSnapshot, setBackupSnapshot] = useState<Reading[] | null>(null)
+  const [backupConfirmed, setBackupConfirmed] = useState(false)
+  const [importing, setImporting] = useState(false)
   const [descending, setDescending] = useState(true)
   const [tableStart, setTableStart] = useState('')
   const [tableEnd, setTableEnd] = useState('')
@@ -50,6 +56,7 @@ function App() {
   const [periodStart, setPeriodStart] = useState(localDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1)))
   const [periodEnd, setPeriodEnd] = useState(localDate(new Date()))
   const [compare, setCompare] = useState(false)
+  const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>('all')
   const [comparePeriod, setComparePeriod] = useState<PeriodKey>('last-month')
   const [compareStart, setCompareStart] = useState('')
   const [compareEnd, setCompareEnd] = useState('')
@@ -63,13 +70,13 @@ function App() {
 
   const currentRange = periodRange(period, periodStart, periodEnd)
   const comparisonRange = compare ? periodRange(comparePeriod, compareStart, compareEnd) : null
-  const current = readings.filter((reading) => inRange(reading.measuredAt, currentRange))
-  const comparison = readings.filter((reading) => inRange(reading.measuredAt, comparisonRange))
+  const current = readings.filter((reading) => inRange(reading.measuredAt, currentRange) && inTimeOfDay(reading.measuredAt, timeOfDay))
+  const comparison = readings.filter((reading) => inRange(reading.measuredAt, comparisonRange) && inTimeOfDay(reading.measuredAt, timeOfDay))
   const shown = useMemo(() => readings.filter((reading) => (!tableStart || reading.measuredAt.slice(0, 10) >= tableStart) && (!tableEnd || reading.measuredAt.slice(0, 10) <= tableEnd)).sort((a, b) => descending ? b.measuredAt.localeCompare(a.measuredAt) : a.measuredAt.localeCompare(b.measuredAt)), [readings, tableStart, tableEnd, descending])
   const mean = (key: 'systolic' | 'diastolic' | 'pulse') => current.length ? Math.round(current.reduce((sum, reading) => sum + reading[key], 0) / current.length) : '–'
 
   async function add() {
-    const issue = validate(draft)
+    const issue = validateReading(draft)
     if (issue) { setError(issue); setMessage(''); return }
     const reading = { ...draft, comment: draft.comment.trim(), id: crypto.randomUUID() }
     try {
@@ -86,7 +93,7 @@ function App() {
 
   async function saveEdit() {
     if (!editing || !editingId) return
-    const issue = validate(editing)
+    const issue = validateReading(editing)
     if (issue) { setError(issue); setMessage(''); return }
     const reading = { ...editing, comment: editing.comment.trim(), id: editingId }
     try {
@@ -109,6 +116,71 @@ function App() {
     } catch { setError('Messung konnte nicht gelöscht werden.') }
   }
 
+  async function selectImportFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    setPendingImport(null)
+    setBackupSnapshot(null)
+    setBackupConfirmed(false)
+    setError('')
+    setMessage('')
+    try {
+      if (file.size > 10_000_000) throw new Error('Die CSV-Datei darf höchstens 10 MB groß sein.')
+      const imported = parseReadingsCsv(await file.text())
+      setPendingImport({ name: file.name, readings: imported })
+    } catch (issue) {
+      setError(issue instanceof Error ? issue.message : 'Die CSV-Datei konnte nicht gelesen werden.')
+    }
+  }
+
+  async function startBackup() {
+    try {
+      const latest = await getReadings()
+      exportCsv(latest)
+      setReadings(latest)
+      setBackupSnapshot(latest)
+      setBackupConfirmed(false)
+      setError('')
+      setMessage('CSV-Sicherung gestartet. Bitte prüfe, dass die Datei gespeichert wurde.')
+    } catch {
+      setError('Die CSV-Sicherung konnte nicht gestartet werden. Es wurden keine Daten ersetzt.')
+    }
+  }
+
+  async function importReadings() {
+    if (!pendingImport || importing || (readings.length > 0 && (backupSnapshot !== readings || !backupConfirmed))) return
+    setImporting(true)
+    try {
+      const latest = await getReadings()
+      if (!sameReadings(latest, readings)) {
+        setReadings(latest)
+        setBackupSnapshot(null)
+        setBackupConfirmed(false)
+        setError('Die gespeicherten Messungen haben sich geändert. Bitte die aktuellen Daten erneut als CSV sichern.')
+        setMessage('')
+        return
+      }
+      await replaceReadings(pendingImport.readings)
+      setReadings(pendingImport.readings)
+      setPendingImport(null)
+      setBackupSnapshot(null)
+      setBackupConfirmed(false)
+      setEditingId(null)
+      setEditing(null)
+      setDescending(true)
+      setTableStart('')
+      setTableEnd('')
+      setError('')
+      setMessage(`${pendingImport.readings.length} Messungen geladen. Die bisherigen Daten wurden ersetzt.`)
+    } catch {
+      setError('Import fehlgeschlagen. Die bisherigen Daten sind erhalten geblieben.')
+      setMessage('')
+    } finally {
+      setImporting(false)
+    }
+  }
+
   return <div className="app-shell">
     <header className="topbar"><div className="brand"><span className="brand-mark" aria-hidden="true">♥</span><span>Blutdruck<span className="brand-light">Tagebuch</span></span></div><span className="local-badge">● Nur auf diesem Gerät</span></header>
     <main>
@@ -119,6 +191,7 @@ function App() {
         <div className="section-heading"><div><p className="eyebrow">Analyse</p><h2 id="dashboard-heading">Verlauf</h2></div><span className="section-note">{rangeLabel(currentRange)}</span></div>
         <div className="controls-row">
           <PeriodSelect label="Zeitraum" value={period} setValue={setPeriod} start={periodStart} end={periodEnd} setStart={setPeriodStart} setEnd={setPeriodEnd} />
+          <label className="time-filter">Tageszeit<select value={timeOfDay} onChange={(event) => setTimeOfDay(event.target.value as TimeOfDay)}><option value="all">Alle</option><option value="morning">Morgens · 00–10 Uhr</option><option value="midday">Mittags · 10–16 Uhr</option><option value="evening">Abends · 16–24 Uhr</option></select></label>
           <label className="compare-toggle"><input type="checkbox" checked={compare} onChange={(event) => setCompare(event.target.checked)} /><span>Mit anderem Zeitraum vergleichen</span></label>
           {compare && <PeriodSelect label="Vergleichszeitraum" value={comparePeriod} setValue={setComparePeriod} start={compareStart} end={compareEnd} setStart={setCompareStart} setEnd={setCompareEnd} />}
         </div>
@@ -130,6 +203,19 @@ function App() {
 
       <section className="panel readings-panel" id="messungen" aria-labelledby="readings-heading">
         <div className="section-heading"><div><p className="eyebrow">Protokoll</p><h2 id="readings-heading">Messungen</h2></div><button className="secondary-button" type="button" onClick={() => exportCsv(readings)} disabled={readings.length === 0}>CSV exportieren</button></div>
+        <div className="import-box">
+          <div><strong>Daten aus CSV laden</strong><p>Eine Datei aus diesem Blutdruck-Tagebuch auswählen. Vor dem Ersetzen vorhandener Messungen zuerst eine CSV-Sicherung speichern.</p></div>
+          <label className="import-file-label">CSV-Datei auswählen<input aria-label="CSV-Datei zum Laden auswählen" type="file" accept=".csv,text/csv" onChange={selectImportFile} disabled={loading || importing} /></label>
+          {pendingImport && <div className="import-preview">
+            <p><strong>{pendingImport.readings.length} Messungen</strong> aus „{pendingImport.name}“ geprüft. Aktuell gespeichert: {readings.length}.</p>
+            {readings.length > 0 && <>
+              <button className="secondary-button" type="button" onClick={startBackup} disabled={importing}>1. Bestehende Daten als CSV sichern</button>
+              {backupSnapshot === readings && <label className="backup-confirm"><input type="checkbox" checked={backupConfirmed} onChange={(event) => setBackupConfirmed(event.target.checked)} /><span>Ich habe geprüft, dass die Sicherungsdatei gespeichert wurde.</span></label>}
+              {backupSnapshot && backupSnapshot !== readings && <p className="import-warning">Die Messungen haben sich seit der Sicherung geändert. Bitte erneut sichern.</p>}
+            </>}
+            <div className="import-actions"><button className="primary-button" type="button" onClick={importReadings} disabled={importing || (readings.length > 0 && (backupSnapshot !== readings || !backupConfirmed))}>{importing ? 'Lade Daten …' : readings.length > 0 ? '2. Bisherige Daten ersetzen und laden' : 'Daten laden'}</button><button className="text-button" type="button" onClick={() => { setPendingImport(null); setBackupSnapshot(null); setBackupConfirmed(false); setMessage('') }} disabled={importing}>Abbrechen</button></div>
+          </div>}
+        </div>
         <div className="table-tools"><label>Von<input type="date" value={tableStart} onChange={(event) => setTableStart(event.target.value)} /></label><label>Bis<input type="date" value={tableEnd} min={tableStart} onChange={(event) => setTableEnd(event.target.value)} /></label><button className="text-button" type="button" onClick={() => { setTableStart(''); setTableEnd('') }}>Filter zurücksetzen</button><span className="result-count">{shown.length} von {readings.length} Einträgen</span></div>
         <div className="table-scroll"><table>
           <thead><tr><th><button className="sort-button" type="button" onClick={() => setDescending((value) => !value)} aria-label={`Nach Datum und Uhrzeit sortieren, aktuell ${descending ? 'neueste zuerst' : 'älteste zuerst'}`}>Datum & Uhrzeit <span aria-hidden="true">{descending ? '↓' : '↑'}</span></button></th><th>Systolisch <span className="unit">mmHg</span></th><th>Diastolisch <span className="unit">mmHg</span></th><th>Puls <span className="unit">bpm</span></th><th>Kommentar</th><th>Aktion</th></tr></thead>
