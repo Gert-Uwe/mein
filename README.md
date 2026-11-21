@@ -1,75 +1,33 @@
-# React + TypeScript + Vite
+# Blutdruck Tagebuch
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Offlinefähige iPhone-PWA für Blutdruckmessungen. Die App läuft ohne Backend. Messungen werden in IndexedDB auf dem jeweiligen Gerät gespeichert.
 
-Currently, two official plugins are available:
+## Funktionen
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Systolischen und diastolischen Druck, Puls, Datum/Uhrzeit und Kommentar direkt in der Tabelle erfassen und bearbeiten
+- Nach Datum/Uhrzeit sortieren und die Tabelle nach Datum filtern
+- Verlauf mit frei wählbaren und vordefinierten Zeiträumen anzeigen und zwei Zeiträume vergleichen
+- Alle Messungen als CSV exportieren
+- Nach dem ersten Online-Aufruf offline starten und nutzen
 
-## React Compiler
+## Lokal starten
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```sh
+npm ci
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
+Für einen Produktions-Build mit Offline-Cache:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```sh
+npm run build
+npm run preview
 ```
+
+`vite-plugin-pwa` erzeugt beim Build Manifest und Service Worker. Die App verwendet den Vite-Basispfad `/mein/`. Der bestehende GitHub-Actions-Workflow stellt `dist` über GitHub Pages bereit.
+
+## Auf dem iPhone installieren
+
+Die HTTPS-Adresse der GitHub-Pages-Seite in Safari öffnen. Über **Teilen → Zum Home-Bildschirm** die App hinzufügen. Die Seite einmal online laden, bevor sie offline genutzt wird.
+
+Die Daten bleiben im Browser-Speicher des Geräts und werden nicht zwischen Geräten synchronisiert. Regelmäßig über **CSV exportieren** sichern. Das Löschen von Browser- oder Web-App-Daten kann die Messungen entfernen.
